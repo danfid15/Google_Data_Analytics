@@ -1,0 +1,432 @@
+---
+title: "bikers_GoogleCapstone"
+author: "Daniel Fidalgo"
+date: "11/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Load packages
+library("readr")
+library("tidyverse")
+library("lubridate")
+library("gridExtra")
+library("janitor")
+
+#Set plot theme
+theme_set(theme_light())
+
+```
+
+## 1. Ask
+
+### 1.1 The objective
+
+-   How do annual members and casual members use bikes differently?
+
+-   How to convert casual riders into annual members?
+
+## 2. Prepare
+
+### 2.1 Download the required data
+
+In this case, we are using the last 12 months of data provided by the stakeholders company.
+
+```{r load_data}
+
+#Load the data from the last 12 months
+biker_10_2021 <- read_csv("bikers_data/202110-divvy-tripdata/202110-divvy-tripdata.csv") # October 2021
+biker_09_2021 <- read_csv("bikers_data/202109-divvy-tripdata/202109-divvy-tripdata.csv") # September 2021
+biker_08_2021 <- read_csv("bikers_data/202108-divvy-tripdata/202108-divvy-tripdata.csv") # August 2021
+biker_07_2021 <- read_csv("bikers_data/202107-divvy-tripdata/202107-divvy-tripdata.csv") # July 2021
+biker_06_2021 <- read_csv("bikers_data/202106-divvy-tripdata/202106-divvy-tripdata.csv") # June 2021
+biker_05_2021 <- read_csv("bikers_data/202105-divvy-tripdata/202105-divvy-tripdata.csv") # May 2021
+biker_04_2021 <- read_csv("bikers_data/202104-divvy-tripdata/202104-divvy-tripdata.csv") # April 2021
+biker_03_2021 <- read_csv("bikers_data/202103-divvy-tripdata/202103-divvy-tripdata.csv") # March 2021
+biker_02_2021 <- read_csv("bikers_data/202102-divvy-tripdata/202102-divvy-tripdata.csv") # February 2021
+biker_01_2021 <- read_csv("bikers_data/202101-divvy-tripdata/202101-divvy-tripdata.csv") # January 2021
+biker_12_2020 <- read_csv("bikers_data/202012-divvy-tripdata/202012-divvy-tripdata.csv") # December 2020
+biker_11_2020 <- read_csv("bikers_data/202011-divvy-tripdata/202011-divvy-tripdata.csv") # November 2020
+
+#Pool the data into a single data.frame
+bikers_pooled <- rbind(biker_10_2021, biker_09_2021, biker_08_2021, biker_07_2021, biker_06_2021, biker_05_2021, biker_04_2021, biker_03_2021, biker_02_2021,biker_01_2021, biker_12_2020, biker_11_2020)
+
+```
+
+```{r remove data frames, echo=FALSE}
+
+#Remove the monthly data frames from the global environment
+rm(biker_01_2021,biker_02_2021,biker_03_2021,biker_04_2021,biker_05_2021,biker_06_2021,biker_07_2021,biker_08_2021,biker_09_2021,biker_10_2021,biker_11_2020,biker_12_2020)
+
+```
+
+### 2.2 Identify the how the data is organized
+
+```{r preview data}
+# Look at the data structure
+glimpse(bikers_pooled)
+colnames(bikers_pooled)
+head(bikers_pooled)
+
+# Look at missing data
+
+# table.NA function
+
+# This function automatically calculates the number and percentage of missing values for each column in a data frame. 
+
+table_NA<- function(data){
+  
+  require(ggplot2)
+  
+  na.table<- matrix(NA,ncol(data),3)
+  na.table[,1] <- colnames(data)
+  na.table<- data.frame(na.table)
+  colnames(na.table)<- c("Variable","n_missing","missing_percent")
+  
+  for (a in 1:(ncol(data))) {
+    
+    na.table[a,2]<- sum(is.na(data[,a]))
+    na.table[a,3]<- paste(round((sum(is.na(data[,a]))/nrow(data)*100),1),"%")
+    
+  }
+  
+  return(table.NA = na.table)
+}
+
+table_NA(bikers_pooled)
+
+```
+
+### 2.3 Sort and filter the data
+
+We are dropping all rows with any missing values. After removing them, we lost 16.47% of the rows, however a very large portion of the dataset is still intact.
+
+```{r filter and drop NAs}
+
+# filter and drop NAs
+bikers_clean <- bikers_pooled%>%
+  select(member_casual,rideable_type,started_at,ended_at,start_station_name,
+         end_station_name)%>%
+  drop_na()
+
+# Percentage of the dataset that was removed
+((nrow(bikers_clean)-nrow(bikers_pooled))/nrow(bikers_pooled)*100)
+
+```
+
+```{r sort}
+
+# Arrange the data by started date
+bikers_clean<- bikers_clean%>%
+  arrange(started_at)
+
+```
+
+```{r format}
+
+# Change characters to factors and check for naming errors 
+bikers_clean$member_casual<- as.factor(bikers_clean$member_casual)
+levels(bikers_clean$member_casual)
+
+bikers_clean$rideable_type<- as.factor(bikers_clean$rideable_type)
+levels(bikers_clean$rideable_type)
+
+bikers_clean$start_station_name <- as.factor(bikers_clean$start_station_name)
+nlevels(bikers_clean$start_station_name)
+
+bikers_clean$end_station_name <- as.factor(bikers_clean$end_station_name)
+nlevels(bikers_clean$end_station_name)
+
+# Make sure all dates are in Year-month-day_hours_minutes_seconds
+bikers_clean$started_at<- ymd_hms(bikers_clean$started_at)
+bikers_clean$ended_at<- ymd_hms(bikers_clean$ended_at)
+
+# Clean the column names for possible inconsistencies
+bikers_clean<- clean_names(bikers_clean)
+
+
+```
+
+## 3. Process
+
+### 3.1 Transform the data
+
+After this are going to manipulate the data to create some more variables:
+
+-   A column for the day of the week each ride was taken.
+-   A column for the month each ride was taken.
+
+```{r data transformation}
+
+# Create a column for day of the week, another for month, and another for time
+bikers_clean <- bikers_clean%>%
+  mutate(hour_start = hour(started_at),
+         week_day = wday(started_at,label = TRUE, abbr = FALSE),
+         month = month(started_at, label = TRUE,),
+         ride_length_mins = as.numeric(abs(round(difftime(started_at, ended_at, unit="mins"),1))))
+
+```
+
+```{r remove outliers}
+
+#Remove rides whose length (in minutes) is greater than the mean plus two times the standard deviation
+
+mean_ride_length<- mean(bikers_clean$ride_length_mins)
+sd_ride_length<- sd((bikers_clean$ride_length_mins))
+
+outlier.index<- which(bikers_clean$ride_length_mins>mean_ride_length+sd_ride_length*2)
+
+bikers_clean<- bikers_clean[-outlier.index,]
+
+```
+
+```{r mode function}
+
+# A function to calculate the mode for a given vector
+# This function does not for for entire data.frames, only single vectors.
+
+mode<- function(vector){
+  
+  #transfor the vector into a factor 
+  vector<- as.factor(vector)
+  #Use the table function to count each of the factor
+  table_vector<- table(vector)
+  #Which factor repeats itself the most
+  max_index<- max(table(vector))
+  #print the name of the factor
+  result<- names(which(table_vector==max_index))
+  
+  return(result)
+}
+
+```
+
+### 3.3 Summarize data
+
+```{r summarize}
+
+# According to membership
+membership<- bikers_clean%>%
+  group_by(member_casual)%>%
+  summarize(N = n(),
+            average_ridelength_mins = mean(ride_length_mins),
+            sd_ridelength = sd(ride_length_mins),
+            max_ridelength = max(ride_length_mins),
+            mode_week = mode(week_day),
+            mode_start_station = mode(start_station_name),
+            mode_end_station = mode(end_station_name))%>%
+  ungroup()
+
+# According to membership AND type of bike
+membership_biketype<- 
+  bikers_clean%>%
+  group_by(member_casual, rideable_type)%>%
+  summarize(N = n(),
+            average_ridelength_mins = mean(ride_length_mins),
+            sd_ridelength = sd(ride_length_mins),
+            max_ridelength = max(ride_length_mins),
+            mode_week = mode(week_day),
+            mode_start_station = mode(start_station_name),
+            mode_end_station = mode(end_station_name))%>%
+  ungroup()
+
+# According to membership AND Hours of the day
+membership_hours<- 
+  bikers_clean%>%
+  group_by(member_casual, hour_start)%>%
+  summarize(N = n(),
+            average_ridelength_mins = mean(ride_length_mins),
+            sd_ridelength = sd(ride_length_mins),
+            max_ridelength = max(ride_length_mins),
+            mode_week = mode(week_day),
+            mode_start_station = mode(start_station_name),
+            mode_end_station = mode(end_station_name))%>%
+  ungroup()
+
+# Acording to membership AND days of the week AND months
+membership_week_month<- bikers_clean%>%
+  group_by(member_casual,week_day,month) %>%
+  summarize(N = n(),
+            average_ridelength_mins = mean(ride_length_mins),
+            sd_ridelength = sd(ride_length_mins),
+            max_ridelength = max(ride_length_mins),
+            mode_week = mode(week_day),
+            mode_start_station = mode(start_station_name),
+            mode_end_station = mode(end_station_name))%>%
+  ungroup()
+  
+```
+
+## 4. Analyze
+
+### 4.1 Are there differences in biking time and number of rides between members and casuals over the last year
+
+Over the last year, casual members have ride a higher amount of time, but members lead the number of rides.
+
+```{r}
+knitr::kable(membership)
+```
+
+```{r}
+
+p1<- ggplot(membership, aes(x= member_casual,y=N, fill=member_casual))+
+  geom_col()+
+  labs(title = "Biker Casual Vs. Members",subtitle = "Total number of rides between 11-2020 and 10-2021",x="",y="Number of rides", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
+  scale_fill_viridis_d()
+
+p2<- ggplot(membership, aes(x= member_casual,y=average_ridelength_mins, fill=member_casual))+
+  geom_col()+
+  labs(title = "Biker Casual Vs. Members",subtitle = "Ride time (minutes) between 11-2020 and 10-2021",x="",y="Average time of rides (minutes)",fill = "User")+
+  scale_fill_viridis_d()
+
+grid.arrange(p1, p2, nrow = 1)
+
+```
+
+### 4.2 Does bike type influences the length or number of rides between members and casuals?
+
+-   Casual members use bikes mostly on a Saturday independently of bike type.
+
+-   Classic bikes have the highest amount of rides independent of membership.
+
+-   Docked bikes have the lowest number of rides per type of bike independent of membership. But casuals using docked bikes the longest rides on average.
+
+-   Electric bikes always have the shortest rides, and their usage is between classic and docked bikes.
+
+```{r}
+knitr::kable(membership_biketype)
+```
+
+```{r}
+
+p3<- ggplot(membership_biketype, aes(x= average_ridelength_mins, y= N, shape= rideable_type, color= mode_week))+
+  geom_point(size=6)+
+  labs(title = "Biker Casual Vs. Members",subtitle = "Rides in different bike types between 11-2020 and 10-2021",x="Average time of rides (minutes)",y="Number of Rides",caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
+  facet_wrap(~member_casual)+
+  scale_color_viridis_d()
+
+p3
+```
+
+### 4.3 Are the differences during the day that we should account for?
+
+-   Compared to Casuals, Members have the highest number of rides throughout the day, except during night time (approximately between 20.00h and 04.00h).
+
+-   Members always have the shortest rides throughout the day.
+
+-   In both cases, there is a spike in the number of rides during the afternoon, and a big decrease during the night.
+
+```{r}
+knitr::kable(membership_hours)
+```
+
+```{r}
+
+p4<- ggplot(membership_hours,aes(x=hour_start,y=N,color=member_casual))+
+  geom_line(size=3)+
+    labs(title = "Biker Casual Vs. Members",subtitle = "Number of rides per hour between 11-2020 and 10-2021",x="Hours",y="Number of rides", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
+  scale_color_viridis_d()
+
+p4
+
+
+p5<- ggplot(membership_hours,aes(x=hour_start,y=average_ridelength_mins,color=member_casual))+
+  geom_line(size=3)+
+    labs(title = "Biker Casual Vs. Members",subtitle = "Length of rides per hour between 11-2020 and 10-2021",x="Hours",y="Average time of rides (minutes)", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
+  scale_color_viridis_d()
+
+p5
+
+
+```
+
+### 4.4 Are the differences during the week days that we should account for?
+
+-   Although members have the overall highest number of rides, casuals surpass it on Fridays, Saturdays and Sundays.
+
+-   Casuals always have the longest bike rides in every day of the week.
+
+```{r}
+knitr::kable(head(membership_week_month))
+```
+
+```{r}
+p6<- ggplot(membership_week_month,aes(x=week_day,y=N,fill=member_casual))+
+  geom_col(size=3,position = position_dodge())+
+    labs(title = "Biker Casual Vs. Members",subtitle = "Number of rides per days of the week, between 11-2020 and 10-2021",x="",y="Number of rides", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
+  scale_fill_viridis_d()
+
+p6
+
+p7<- ggplot(membership_week_month,aes(x=week_day,y=average_ridelength_mins,fill=member_casual))+
+  geom_col(size=3,position = position_dodge())+
+    labs(title = "Biker Casual Vs. Members",subtitle = "Length of rides per days of the week, between 11-2020 and 10-2021",x="",y="Average time of rides (minutes)", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
+  scale_fill_viridis_d()
+
+p7
+
+
+```
+
+### 4.5 Are the differences during the months that we should account for?
+
+-   Number of rides fluctuate significantly during the year for both subscriptions. Both have a significant decrease in the number of rides between november 2020 and february 2021. Number of rides increase from march to july, and then start decreasing.
+
+-   For casuals, the number of rides peak in July.
+
+-   For members, the peak is in September, although this maximum is still lower than the number of casual rides.
+
+-   As for the length of the rides, the monthly average is always bigger for casual rather than members.
+
+-   The length of the rides is stable throuhout the year for members, while casuals have a higher fluctuation.
+
+```{r}
+p8<- ggplot(membership_week_month,aes(x=month,y=N,fill=member_casual))+
+  geom_col(size=3,position = position_dodge())+
+    labs(title = "Biker Casual Vs. Members",subtitle = "Number of rides per month, between 11-2020 and 10-2021",x="",y="Number of rides", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
+  scale_fill_viridis_d()
+
+p8
+
+p9<- ggplot(membership_week_month,aes(x=month,y=average_ridelength_mins,fill=member_casual))+
+  geom_col(size=3,position = position_dodge())+
+    labs(title = "Biker Casual Vs. Members",subtitle = "Length of rides per month, between 11-2020 and 10-2021",x="",y="Average time of rides (minutes)", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
+  scale_fill_viridis_d()
+
+p9
+
+```
+
+## 5. Share
+
+The results of this capstone project are now available at <https://github.com/danfid15>.
+
+## 6. Act
+
+### 6.1 Insights
+
+In sum, the results of this analysis suggest the following profile for each type of consumer:
+
+-   **Casuals**: They have lower number of rides, but the longest ones (sometimes >20 minutes) when compared to members of this service. Nonetheless, their number of rides surpass Members during warmer months (March=August). There is a high fluctuation both on the length and number of rides over the year, low between November 2020 and March 2021, increases from April to July, and then progressively decreases. They use bikes mostly on Fridays, Saturdays and Sundays. Their peak of usage during the day is the afternoon, and prefer classic bikes over docker/ electric bikes.
+
+-   **Members**: They have the highest amount of rides, but these are usually shorter by comparison. Their usage of the service fluctuates significantly during the year, with barely use of bikes in February, and their peak of usage is in September. Nevertheless, unlike casuals, their ride length does not fluctuate significantly over the year. They use bikes throughout the week, and not just during weekends. Their peak of usage during the day is also in the afternoon, and they also prefer classic bikes over docker/ electric bikes.
+
+### 6.2 Next steps
+
+Design marketing strategies aimed at converting casual riders into annual members:
+
+-   Promote [annual benefits for members during the weekends]{.ul}, which seems to be the favorite days for casuals.
+
+-   Focus these [promotions between April and August]{.ul}, since its the peak of usage for both type of consumers.
+
+-   Focus the [advertisement at Streeter Dr & Grand Ave]{.ul}, which the station most casuals use to both start and end most of the rides during the afternoon.
+
+### 6.3 Additional data for future studies
+
+-   The trajectory of each ride.
+
+-   The cost of each ride for casuals.
+
+-   The cost of an annual subscription.
