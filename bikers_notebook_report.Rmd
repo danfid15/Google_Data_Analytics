@@ -2,7 +2,9 @@
 title: "bikers_GoogleCapstone"
 author: "Daniel Fidalgo"
 date: "11/30/2021"
-output: html_document
+output:
+  html_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -245,7 +247,7 @@ membership_hours<-
             mode_end_station = mode(end_station_name))%>%
   ungroup()
 
-# Acording to membership AND days of the week AND months
+# According to membership AND days of the week AND months
 membership_week_month<- bikers_clean%>%
   group_by(member_casual,week_day,month) %>%
   summarize(N = n(),
@@ -281,7 +283,6 @@ p2<- ggplot(membership, aes(x= member_casual,y=average_ridelength_mins, fill=mem
   labs(title = "Biker Casual Vs. Members",subtitle = "Ride time (minutes) between 11-2020 and 10-2021",x="",y="Average time of rides (minutes)",fill = "User")+
   scale_fill_viridis_d()
 
-grid.arrange(p1, p2, nrow = 1)
 
 ```
 
@@ -307,7 +308,7 @@ p3<- ggplot(membership_biketype, aes(x= average_ridelength_mins, y= N, shape= ri
   facet_wrap(~member_casual)+
   scale_color_viridis_d()
 
-p3
+
 ```
 
 ### 4.3 Are the differences during the day that we should account for?
@@ -329,16 +330,10 @@ p4<- ggplot(membership_hours,aes(x=hour_start,y=N,color=member_casual))+
     labs(title = "Biker Casual Vs. Members",subtitle = "Number of rides per hour between 11-2020 and 10-2021",x="Hours",y="Number of rides", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
   scale_color_viridis_d()
 
-p4
-
-
 p5<- ggplot(membership_hours,aes(x=hour_start,y=average_ridelength_mins,color=member_casual))+
   geom_line(size=3)+
     labs(title = "Biker Casual Vs. Members",subtitle = "Length of rides per hour between 11-2020 and 10-2021",x="Hours",y="Average time of rides (minutes)", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
   scale_color_viridis_d()
-
-p5
-
 
 ```
 
@@ -358,14 +353,11 @@ p6<- ggplot(membership_week_month,aes(x=week_day,y=N,fill=member_casual))+
     labs(title = "Biker Casual Vs. Members",subtitle = "Number of rides per days of the week, between 11-2020 and 10-2021",x="",y="Number of rides", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
   scale_fill_viridis_d()
 
-p6
 
 p7<- ggplot(membership_week_month,aes(x=week_day,y=average_ridelength_mins,fill=member_casual))+
   geom_col(size=3,position = position_dodge())+
     labs(title = "Biker Casual Vs. Members",subtitle = "Length of rides per days of the week, between 11-2020 and 10-2021",x="",y="Average time of rides (minutes)", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
   scale_fill_viridis_d()
-
-p7
 
 
 ```
@@ -388,20 +380,37 @@ p8<- ggplot(membership_week_month,aes(x=month,y=N,fill=member_casual))+
     labs(title = "Biker Casual Vs. Members",subtitle = "Number of rides per month, between 11-2020 and 10-2021",x="",y="Number of rides", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
   scale_fill_viridis_d()
 
-p8
-
 p9<- ggplot(membership_week_month,aes(x=month,y=average_ridelength_mins,fill=member_casual))+
   geom_col(size=3,position = position_dodge())+
     labs(title = "Biker Casual Vs. Members",subtitle = "Length of rides per month, between 11-2020 and 10-2021",x="",y="Average time of rides (minutes)", caption = "data provided by Cyclistic, a bike-share company in Chicago",fill = "User")+
   scale_fill_viridis_d()
 
-p9
-
 ```
 
 ## 5. Share
 
-The results of this capstone project are now available at <https://github.com/danfid15>.
+```{r}
+# Are there differences in biking time and number of rides between members and casuals over the last year
+grid.arrange(p1, p2, nrow = 1)
+
+# Does bike type influences the length or number of rides between members and casuals?
+p3
+
+
+# Are the differences during the day that we should account for?
+p4
+p5
+
+# Are the differences during the week days that we should account for?
+p6
+p7
+
+# Are the differences during the months that we should account for?
+p8
+p9
+
+```
+
 
 ## 6. Act
 
